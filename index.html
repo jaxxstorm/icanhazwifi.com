@@ -67,6 +67,14 @@
         <p>Your device should now have internet access. Try visiting any website to verify your connection.</p>
         
         <div class="info">
+            <h2 style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">About This Site</h2>
+            <p style="margin-bottom: 8px;">This website serves as a captive portal detection endpoint. Many devices check specific URLs to determine if they're behind a captive portal that requires login.</p>
+            <p style="margin-bottom: 8px;"><strong>Cache Policy:</strong> All content is served with no-cache headers to ensure devices always receive fresh content and properly detect network changes.</p>
+            <p style="margin-bottom: 8px;"><strong>DNS TTL:</strong> DNS records are configured with short time-to-live values, allowing rapid propagation of changes across the internet.</p>
+            <p style="margin-bottom: 0;">This ensures reliable captive portal detection across Android, iOS, Windows, and other operating systems.</p>
+        </div>
+        
+        <div class="info" style="margin-top: 15px; padding-top: 15px;">
             <p>Connection established at <span id="time"></span></p>
         </div>
     </div>
