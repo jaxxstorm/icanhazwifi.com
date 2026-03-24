@@ -53,6 +53,43 @@
             padding-top: 20px;
             border-top: 1px solid #eee;
         }
+        .portal-details {
+            display: none;
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border: 1px solid #e5e5e5;
+        }
+        .portal-details h2 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #111;
+        }
+        .portal-details p {
+            margin-bottom: 8px;
+            word-break: break-word;
+        }
+        .portal-details p:last-child {
+            margin-bottom: 0;
+        }
+        .portal-details strong {
+            color: #333;
+        }
+        .portal-action {
+            display: none;
+            margin-top: 16px;
+            padding: 10px 14px;
+            border: 1px solid #0066cc;
+            background: #0066cc;
+            color: #fff;
+            font: inherit;
+            cursor: pointer;
+        }
+        .portal-action:hover {
+            background: #0052a3;
+            border-color: #0052a3;
+        }
     </style>
 </head>
 <body>
@@ -65,6 +102,14 @@
         </div>
         
         <p>Your device should now have internet access. Try visiting any website to verify your connection.</p>
+
+        <div class="portal-details" id="portal-details">
+            <h2>Detected Captive Portal Details</h2>
+            <p id="portal-source" hidden><strong>Portal page:</strong> <span></span></p>
+            <p id="portal-destination" hidden><strong>Requested destination:</strong> <span></span></p>
+        </div>
+
+        <button class="portal-action" id="portal-action" type="button">Open Captive Portal</button>
         
         <div class="info">
             <h2 style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">About This Site</h2>
@@ -81,10 +126,119 @@
     
     <script>
         document.getElementById('time').textContent = new Date().toLocaleTimeString();
+
+        const portalElements = {
+            details: document.getElementById('portal-details'),
+            source: document.querySelector('#portal-source span'),
+            sourceRow: document.getElementById('portal-source'),
+            destination: document.querySelector('#portal-destination span'),
+            destinationRow: document.getElementById('portal-destination'),
+            action: document.getElementById('portal-action')
+        };
         
         if (performance.navigation.type === performance.navigation.TYPE_BACK_FORWARD) {
             location.reload(true);
         }
+
+        const safeDecode = (value) => {
+            let decoded = value;
+
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+                try {
+                    const nextValue = decodeURIComponent(decoded.replace(/\+/g, '%20'));
+                    if (nextValue === decoded) {
+                        break;
+                    }
+                    decoded = nextValue;
+                } catch (error) {
+                    break;
+                }
+            }
+
+            return decoded;
+        };
+
+        const normalizeUrl = (value) => {
+            if (!value) {
+                return null;
+            }
+
+            const decoded = safeDecode(value.trim());
+
+            try {
+                return new URL(decoded).toString();
+            } catch (error) {
+                return null;
+            }
+        };
+
+        const detectPortalMetadata = () => {
+            const params = new URLSearchParams(window.location.search);
+            const destinationKeys = [
+                'url',
+                'userurl',
+                'redirect',
+                'redirect_url',
+                'redir',
+                'dst',
+                'dest',
+                'continue',
+                'next',
+                'target'
+            ];
+
+            let requestedDestination = null;
+
+            for (const [key, value] of params.entries()) {
+                const normalizedKey = key.toLowerCase();
+                if (!destinationKeys.includes(normalizedKey)) {
+                    continue;
+                }
+
+                requestedDestination = normalizeUrl(value);
+                if (requestedDestination) {
+                    break;
+                }
+            }
+
+            let portalPage = null;
+            if (document.referrer) {
+                try {
+                    const referrerUrl = new URL(document.referrer);
+                    if (referrerUrl.origin !== window.location.origin) {
+                        portalPage = referrerUrl.toString();
+                    }
+                } catch (error) {
+                    portalPage = null;
+                }
+            }
+
+            return {
+                portalPage,
+                requestedDestination,
+                actionTarget: portalPage || requestedDestination
+            };
+        };
+
+        const renderPortalMetadata = ({ portalPage, requestedDestination }) => {
+            let hasMetadata = false;
+
+            if (portalPage) {
+                portalElements.source.textContent = portalPage;
+                portalElements.sourceRow.hidden = false;
+                hasMetadata = true;
+            }
+
+            if (requestedDestination) {
+                portalElements.destination.textContent = requestedDestination;
+                portalElements.destinationRow.hidden = false;
+                hasMetadata = true;
+            }
+
+            if (hasMetadata) {
+                portalElements.details.style.display = 'block';
+            }
+        };
 
         // Captive portal detection
         const isCaptivePortal = () => {
@@ -138,6 +292,9 @@
         const updatePortalStatus = async () => {
             const inPortal = isCaptivePortal();
             const hasConnectivity = await testConnectivity();
+            const portalMetadata = detectPortalMetadata();
+
+            renderPortalMetadata(portalMetadata);
             
             if (inPortal) {
                 console.log('Captive portal environment detected');
@@ -146,12 +303,16 @@
             
             if (!hasConnectivity) {
                 const notice = document.querySelector('.notice p');
-                notice.textContent = 'Click anywhere on this page to complete WiFi login.';
-                document.body.style.cursor = 'pointer';
-                document.body.addEventListener('click', () => {
-                    // Attempt to trigger captive portal login flow
-                    window.location.reload();
-                }, { once: true });
+                notice.textContent = portalMetadata.actionTarget
+                    ? 'Open the detected captive portal to complete WiFi login.'
+                    : 'Refresh this page after completing WiFi login in your browser.';
+
+                if (portalMetadata.actionTarget) {
+                    portalElements.action.style.display = 'inline-block';
+                    portalElements.action.addEventListener('click', () => {
+                        window.location.assign(portalMetadata.actionTarget);
+                    }, { once: true });
+                }
             }
         };
 
